@@ -231,6 +231,9 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
       vexpand: true,
     });
 
+    // Enable drag-and-drop reordering
+    this._treeView.set_reorderable(true);
+
     const label = new Gtk.TreeViewColumn({ title: 'Label' });
     const renderer = new Gtk.CellRendererText();
     label.pack_start(renderer, true);
