@@ -221,6 +221,24 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
     this._listBox!.connect('row-selected', this._onRowSelected.bind(this));
   }
 
+  _getToolbar(): Gtk.Box {
+    const toolbar = (this._toolbar = new Gtk.Box({}));
+
+    /* new widget button with menu */
+    const newButton = new Gtk.Button({ icon_name: 'list-add-symbolic' });
+    newButton.connect('clicked', this._addClicked.bind(this));
+    toolbar.append(newButton);
+
+    /* delete button */
+    const delButton = (this._delButton = new Gtk.Button({ icon_name: 'list-remove-symbolic' }));
+    delButton.connect('clicked', this._delClicked.bind(this));
+    toolbar.append(delButton);
+
+    this._updateToolbar();
+
+    return toolbar;
+  }
+
   _getListBox(): Gtk.ListBox {
     this._listBox = new Gtk.ListBox({
       selection_mode: Gtk.SelectionMode.SINGLE,
