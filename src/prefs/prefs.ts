@@ -336,6 +336,8 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
     if (!prevIter) return;
 
     this._store!.swap(iter, prevIter);
+    // Explicitly persist to GSettings (swap may not reliably emit rows-reordered)
+    this._store!.persistOrder();
     this._rebuildListBox();
     // Re-select the moved row
     const newRow = this._listBox!.get_row_at_index(index - 1);
@@ -354,6 +356,8 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
     if (!nextIter) return;
 
     this._store!.swap(iter, nextIter);
+    // Explicitly persist to GSettings (swap may not reliably emit rows-reordered)
+    this._store!.persistOrder();
     this._rebuildListBox();
     // Re-select the moved row
     const newRow = this._listBox!.get_row_at_index(index + 1);

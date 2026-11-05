@@ -109,6 +109,11 @@ export class IndicatorCollectionModel extends Gtk.ListStore {
     this._settings.set_strv(INDICATORS_KEY, configs);
   }
 
+  // Public method to explicitly persist current order to GSettings
+  persistOrder() {
+    this._writeSettings();
+  }
+
   _onRowChanged(self, path, iter) {
     const config = String(this.get_value(iter, this.Columns.CONFIG));
 
