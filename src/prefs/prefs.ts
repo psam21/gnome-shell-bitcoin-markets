@@ -398,6 +398,17 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
     this._updateToolbar();
   }
 
+  _updateToolbar() {
+    let sensitive = false;
+
+    if (this._listBox) {
+      const row = this._listBox.get_selected_row();
+      sensitive = !!row;
+    }
+
+    this._delButton!.set_sensitive(sensitive);
+  }
+
   _addClicked() {
     this._store!.append();
     this._rebuildListBox();
