@@ -179,6 +179,8 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
   private _selection?: Gtk.TreeSelection;
   private _toolbar?: Gtk.Box;
   private _delButton?: Gtk.Button;
+  private _upButton?: Gtk.Button;
+  private _downButton?: Gtk.Button;
   private _indicatorConfigView: IndicatorConfigView | null = null;
 
   constructor(ext: ExtensionBase) {
@@ -254,8 +256,17 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
     /* delete button */
     const delButton = (this._delButton = new Gtk.Button({ icon_name: 'list-remove-symbolic' }));
     delButton.connect('clicked', this._delClicked.bind(this));
-
     toolbar.append(delButton);
+
+    /* move up button */
+    const upButton = (this._upButton = new Gtk.Button({ icon_name: 'go-up-symbolic' }));
+    upButton.connect('clicked', this._moveUpClicked.bind(this));
+    toolbar.append(upButton);
+
+    /* move down button */
+    const downButton = (this._downButton = new Gtk.Button({ icon_name: 'go-down-symbolic' }));
+    downButton.connect('clicked', this._moveDownClicked.bind(this));
+    toolbar.append(downButton);
 
     this._updateToolbar();
 
@@ -291,13 +302,86 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
 
   _updateToolbar() {
     let sensitive = false;
+    let canMoveUp = false;
+    let canMoveDown = false;
 
     if (this._selection) {
-      const [isSelected] = this._selection.get_selected();
+      const [isSelected, , iter] = this._selection.get_selected();
       sensitive = isSelected;
+
+      if (isSelected && iter) {
+        // Check if we can move up (not the first item)
+        const path = this._store!.get_path(iter);
+        if (path && path.get_indices()[0] > 0) {
+          canMoveUp = true;
+        }
+
+        // Check if we can move down (not the last item)
+        const nextIter = this._store!.iter_next(iter);
+        if (nextIter) {
+          canMoveDown = true;
+        }
+      }
     }
 
     this._delButton!.set_sensitive(sensitive);
+    this._upButton!.set_sensitive(canMoveUp);
+    this._downButton!.set_sensitive(canMoveDown);
+  }
+
+  _moveUpClicked() {
+    const [isSelected, , iter] = this._selection!.get_selected();
+
+    if (!isSelected || !iter) {
+      return;
+    }
+
+    const path = this._store!.get_path(iter);
+    if (!path) {
+      return;
+    }
+
+    const indices = path.get_indices();
+    if (indices[0] <= 0) {
+      return; // Already at top
+    }
+
+    // Swap with previous item
+    const prevPath = path.copy();
+    prevPath.prev();
+    const prevIter = this._store!.get_iter(prevPath);
+
+    if (prevIter) {
+      this._store!.swap(iter, prevIter);
+      // Keep selection on the moved item
+      this._selection!.select_path(prevPath);
+    }
+  }
+
+  _moveDownClicked() {
+    const [isSelected, , iter] = this._selection!.get_selected();
+
+    if (!isSelected || !iter) {
+      return;
+    }
+
+    const path = this._store!.get_path(iter);
+    if (!path) {
+      return;
+    }
+
+    // Check if there's a next item
+    const nextIter = this._store!.iter_next(iter);
+    if (!nextIter) {
+      return; // Already at bottom
+    }
+
+    // Swap with next item
+    const nextPath = path.copy();
+    nextPath.next();
+    this._store!.swap(iter, nextIter);
+    // Keep selection on the moved item
+    this._selection!.select_path(nextPath);
   }
 
   _addClicked() {
