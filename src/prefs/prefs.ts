@@ -1,5 +1,6 @@
 import Adw from '@girs/adw-1';
 import Gtk from '@girs/gtk-4.0';
+import Pango from '@girs/pango-1.0';
 import { ExtensionBase } from '@gnome-shell/extensions/extension';
 import { ExtensionPreferences } from '@gnome-shell/extensions/prefs';
 import { registerGObjectClass } from '../gjs';
@@ -175,8 +176,7 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
   private gettext: GettextFunc;
   private _store?: InstanceType<typeof IndicatorCollectionModel>;
   private _configLayout?: Gtk.Box;
-  private _treeView?: Gtk.TreeView;
-  private _selection?: Gtk.TreeSelection;
+  private _listBox?: Gtk.ListBox;
   private _toolbar?: Gtk.Box;
   private _delButton?: Gtk.Button;
   private _indicatorConfigView: IndicatorConfigView | null = null;
@@ -200,7 +200,7 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
       width_request: 240,
     });
 
-    sidebar.append(this._getTreeView());
+    sidebar.append(this._getListBox());
     sidebar.append(this._getToolbar());
 
     this.append(sidebar);
@@ -218,186 +218,184 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
 
     /* behavior */
 
-    this._selection = this._treeView!.get_selection();
-    this._selection.connect('changed', this._onSelectionChanged.bind(this));
+    this._listBox!.connect('row-selected', this._onRowSelected.bind(this));
   }
 
-  _getTreeView(): Gtk.TreeView {
-    this._treeView = new Gtk.TreeView({
-      model: this._store,
-      headers_visible: false,
-      reorderable: true,
+  _getListBox(): Gtk.ListBox {
+    this._listBox = new Gtk.ListBox({
+      selection_mode: Gtk.SelectionMode.SINGLE,
       hexpand: false,
       vexpand: true,
     });
 
-    // Enable drag-and-drop reordering
-    this._treeView.set_reorderable(true);
+    // Populate from store
+    this._rebuildListBox();
 
-    // Column 0: Up button
-    const upColumn = new Gtk.TreeViewColumn();
-    const upRenderer = new Gtk.CellRendererPixbuf();
-    upColumn.pack_start(upRenderer, false);
-    upColumn.add_attribute(upRenderer, 'icon-name', 2); // Column 2: up icon name
-    upColumn.set_sizing(Gtk.TreeViewColumnSizing.FIXED);
-    upColumn.set_fixed_width(32);
-    this._treeView.insert_column(upColumn, 0);
+    return this._listBox;
+  }
 
-    // Column 1: Label
-    const labelColumn = new Gtk.TreeViewColumn({ title: 'Label' });
-    const labelRenderer = new Gtk.CellRendererText();
-    labelColumn.pack_start(labelRenderer, true);
-    labelColumn.add_attribute(labelRenderer, 'text', 0);
-    this._treeView.insert_column(labelColumn, 1);
+  _rebuildListBox() {
+    // Clear existing rows
+    let child = this._listBox!.get_first_child();
+    while (child) {
+      const next = child.get_next_sibling();
+      this._listBox!.remove(child);
+      child = next;
+    }
 
-    // Column 2: Down button
-    const downColumn = new Gtk.TreeViewColumn();
-    const downRenderer = new Gtk.CellRendererPixbuf();
-    downColumn.pack_start(downRenderer, false);
-    downColumn.add_attribute(downRenderer, 'icon-name', 3); // Column 3: down icon name
-    downColumn.set_sizing(Gtk.TreeViewColumnSizing.FIXED);
-    downColumn.set_fixed_width(32);
-    this._treeView.insert_column(downColumn, 2);
+    // Rebuild from store
+    let [res, iter] = this._store!.get_iter_first();
+    let index = 0;
+    while (res) {
+      const label = String(this._store!.get_value(iter, this._store!.Columns.LABEL));
+      const row = this._createListBoxRow(label, index);
+      this._listBox!.append(row);
+      res = this._store!.iter_next(iter);
+      index++;
+    }
+  }
 
-    // Handle button clicks on up/down columns
-    this._treeView.connect('button-press-event', (view, event) => {
-      const [, x, y] = event.get_coords();
-      const [path, column] = view.get_path_at_pos(x, y);
-      if (!path || !column) {
-        return false;
-      }
-
-      const columnIndex = this._treeView.get_columns().indexOf(column);
-      if (columnIndex === 0) {
-        // Up button clicked
-        this._moveRowUp(path);
-        return true;
-      } else if (columnIndex === 2) {
-        // Down button clicked
-        this._moveRowDown(path);
-        return true;
-      }
-      return false;
+  _createListBoxRow(label: string, index: number): Gtk.ListBoxRow {
+    const row = new Gtk.ListBoxRow({
+      selectable: true,
+      activatable: false,
     });
 
-    return this._treeView;
+    const box = new Gtk.Box({
+      orientation: Gtk.Orientation.HORIZONTAL,
+      spacing: 6,
+      margin_start: 6,
+      margin_end: 6,
+      margin_top: 4,
+      margin_bottom: 4,
+    });
+
+    // Up button
+    const upButton = new Gtk.Button({
+      icon_name: 'go-up-symbolic',
+      sensitive: index > 0,
+      tooltip_text: 'Move up',
+      has_frame: true,
+    });
+    upButton.connect('clicked', () => this._moveRowUp(index));
+    box.append(upButton);
+
+    // Label
+    const labelWidget = new Gtk.Label({
+      label: label,
+      xalign: 0,
+      hexpand: true,
+      ellipsize: Pango.EllipsizeMode.END,
+    });
+    box.append(labelWidget);
+
+    // Down button
+    const downButton = new Gtk.Button({
+      icon_name: 'go-down-symbolic',
+      sensitive: true, // Will be updated after all rows created
+      tooltip_text: 'Move down',
+      has_frame: true,
+    });
+    downButton.connect('clicked', () => this._moveRowDown(index));
+    box.append(downButton);
+
+    row.set_child(box);
+    return row;
   }
 
-  _getToolbar(): Gtk.Box {
-    const toolbar = (this._toolbar = new Gtk.Box({}));
-
-    /* new widget button with menu */
-    const newButton = new Gtk.Button({ icon_name: 'list-add-symbolic' });
-    newButton.connect('clicked', this._addClicked.bind(this));
-    toolbar.append(newButton);
-
-    /* delete button */
-    const delButton = (this._delButton = new Gtk.Button({ icon_name: 'list-remove-symbolic' }));
-    delButton.connect('clicked', this._delClicked.bind(this));
-    toolbar.append(delButton);
-
-    this._updateToolbar();
-
-    return toolbar;
+  _updateListBoxButtons() {
+    let child = this._listBox!.get_first_child();
+    let index = 0;
+    while (child) {
+      const box = child.get_child();
+      if (box) {
+        const upButton = box.get_first_child();
+        const downButton = box.get_last_child();
+        if (upButton instanceof Gtk.Button) {
+          upButton.set_sensitive(index > 0);
+        }
+        if (downButton instanceof Gtk.Button) {
+          const nextSibling = child.get_next_sibling();
+          downButton.set_sensitive(!!nextSibling);
+        }
+      }
+      child = child.get_next_sibling();
+      index++;
+    }
   }
 
-  _onSelectionChanged() {
-    const [isSelected, , iter] = this._selection!.get_selected();
+  _moveRowUp(index: number) {
+    if (index <= 0) return;
 
-    if (isSelected) {
-      this._showIndicatorConfig(this._store!.getConfig(iter));
+    const path = new Gtk.TreePath([index]);
+    const iter = this._store!.get_iter(path);
+    if (!iter) return;
+
+    const prevPath = new Gtk.TreePath([index - 1]);
+    const prevIter = this._store!.get_iter(prevPath);
+    if (!prevIter) return;
+
+    this._store!.swap(iter, prevIter);
+    this._rebuildListBox();
+    // Re-select the moved row
+    const newRow = this._listBox!.get_row_at_index(index - 1);
+    if (newRow) {
+      this._listBox!.select_row(newRow);
+    }
+  }
+
+  _moveRowDown(index: number) {
+    const path = new Gtk.TreePath([index]);
+    const iter = this._store!.get_iter(path);
+    if (!iter) return;
+
+    const nextPath = new Gtk.TreePath([index + 1]);
+    const nextIter = this._store!.get_iter(nextPath);
+    if (!nextIter) return;
+
+    this._store!.swap(iter, nextIter);
+    this._rebuildListBox();
+    // Re-select the moved row
+    const newRow = this._listBox!.get_row_at_index(index + 1);
+    if (newRow) {
+      this._listBox!.select_row(newRow);
+    }
+  }
+
+  _onRowSelected(_listBox: Gtk.ListBox, row: Gtk.ListBoxRow | null) {
+    if (row) {
+      const index = row.get_index();
+      const path = new Gtk.TreePath([index]);
+      const iter = this._store!.get_iter(path);
+      if (iter) {
+        this._showIndicatorConfig(this._store!.getConfig(iter));
+      }
     } else {
       this._showIndicatorConfig(null);
     }
-
     this._updateToolbar();
-  }
-
-  _showIndicatorConfig(indicatorConfig: ConfigModel | null) {
-    if (this._indicatorConfigView) {
-      this._indicatorConfigView.destroy();
-      this._configLayout!.remove(this._indicatorConfigView.widget);
-      this._indicatorConfigView = null;
-    }
-
-    if (indicatorConfig === null) {
-      return;
-    }
-
-    this._indicatorConfigView = new IndicatorConfigView(this.gettext, indicatorConfig);
-    this._configLayout!.append(this._indicatorConfigView.widget);
-  }
-
-  _updateToolbar() {
-    let sensitive = false;
-
-    if (this._selection) {
-      const [isSelected] = this._selection.get_selected();
-      sensitive = isSelected;
-    }
-
-    this._delButton!.set_sensitive(sensitive);
-  }
-
-  _moveRowUp(path: Gtk.TreePath) {
-    const indices = path.get_indices();
-    if (indices[0] <= 0) {
-      return; // Already at top
-    }
-
-    const iter = this._store!.get_iter(path);
-    if (!iter) {
-      return;
-    }
-
-    // Swap with previous item
-    const prevPath = path.copy();
-    prevPath.prev();
-    const prevIter = this._store!.get_iter(prevPath);
-
-    if (prevIter) {
-      this._store!.swap(iter, prevIter);
-      // Keep selection on the moved item
-      this._selection!.select_path(prevPath);
-    }
-  }
-
-  _moveRowDown(path: Gtk.TreePath) {
-    const iter = this._store!.get_iter(path);
-    if (!iter) {
-      return;
-    }
-
-    // Check if there's a next item
-    const nextIter = this._store!.iter_next(iter);
-    if (!nextIter) {
-      return; // Already at bottom
-    }
-
-    // Swap with next item
-    const nextPath = path.copy();
-    nextPath.next();
-    this._store!.swap(iter, nextIter);
-    // Keep selection on the moved item
-    this._selection!.select_path(nextPath);
   }
 
   _addClicked() {
     this._store!.append();
+    this._rebuildListBox();
     this._updateToolbar();
   }
 
   _delClicked() {
-    const [isSelected, , iter] = this._selection!.get_selected();
-
-    if (!iter) {
-      throw new Error();
+    const row = this._listBox!.get_selected_row();
+    if (!row) {
+      return;
     }
 
-    if (isSelected) {
+    const index = row.get_index();
+    const path = new Gtk.TreePath([index]);
+    const iter = this._store!.get_iter(path);
+    if (iter) {
       this._store!.remove(iter);
     }
 
+    this._rebuildListBox();
     this._updateToolbar();
   }
 
