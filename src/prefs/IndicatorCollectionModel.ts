@@ -38,9 +38,11 @@ export class IndicatorCollectionModel extends Gtk.ListStore {
     this.Columns = {
       LABEL: 0,
       CONFIG: 1,
+      UP_ICON: 2,
+      DOWN_ICON: 3,
     };
 
-    this.set_column_types([GObject.TYPE_STRING, GObject.TYPE_STRING]);
+    this.set_column_types([GObject.TYPE_STRING, GObject.TYPE_STRING, GObject.TYPE_STRING, GObject.TYPE_STRING]);
 
     this._settings = settings;
 
@@ -84,10 +86,13 @@ export class IndicatorCollectionModel extends Gtk.ListStore {
 
     const configs = this._settings.get_strv(INDICATORS_KEY);
 
-    configs.forEach((json) => {
+    configs.forEach((json, index) => {
       try {
-        const label = this._getLabel(JSON.parse(json));
-        this.set(this.append(), [this.Columns.LABEL, this.Columns.CONFIG], [label, json]);
+        const config = JSON.parse(json);
+        const label = this._getLabel(config);
+        const upIcon = index > 0 ? 'go-up-symbolic' : '';
+        const downIcon = index < configs.length - 1 ? 'go-down-symbolic' : '';
+        this.set(this.append(), [this.Columns.LABEL, this.Columns.CONFIG, this.Columns.UP_ICON, this.Columns.DOWN_ICON], [label, json, upIcon, downIcon]);
       } catch (e) {
         console.log('error loading indicator config');
         console.error(e);
@@ -120,20 +125,43 @@ export class IndicatorCollectionModel extends Gtk.ListStore {
   }
 
   _onRowInserted(self, path, iter) {
-    this.set(iter, [this.Columns.LABEL, this.Columns.CONFIG], ([
+    this.set(iter, [this.Columns.LABEL, this.Columns.CONFIG, this.Columns.UP_ICON, this.Columns.DOWN_ICON], ([
       this._getLabel(Defaults),
       JSON.stringify(Defaults),
+      'go-up-symbolic',
+      'go-down-symbolic',
     ] as unknown) as GObject.Value[]);
 
+    this._updateIcons();
     this._writeSettings();
   }
 
   _onRowDeleted(_self, _path, _iter) {
+    this._updateIcons();
     this._writeSettings();
   }
 
   _onRowsReordered(_self, _iter, _newOrder: number[]) {
+    this._updateIcons();
     this._writeSettings();
+  }
+
+  _updateIcons() {
+    let [res, iter] = this.get_iter_first();
+    let index = 0;
+    while (res) {
+      const isFirst = index === 0;
+      const nextIter = this.iter_next(iter);
+      const isLast = !nextIter;
+
+      this.set(iter, [this.Columns.UP_ICON, this.Columns.DOWN_ICON], [
+        isFirst ? '' : 'go-up-symbolic',
+        isLast ? '' : 'go-down-symbolic',
+      ]);
+
+      res = this.iter_next(iter);
+      index++;
+    }
   }
 }
 

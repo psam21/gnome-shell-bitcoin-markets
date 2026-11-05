@@ -179,8 +179,6 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
   private _selection?: Gtk.TreeSelection;
   private _toolbar?: Gtk.Box;
   private _delButton?: Gtk.Button;
-  private _upButton?: Gtk.Button;
-  private _downButton?: Gtk.Button;
   private _indicatorConfigView: IndicatorConfigView | null = null;
 
   constructor(ext: ExtensionBase) {
@@ -236,11 +234,51 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
     // Enable drag-and-drop reordering
     this._treeView.set_reorderable(true);
 
-    const label = new Gtk.TreeViewColumn({ title: 'Label' });
-    const renderer = new Gtk.CellRendererText();
-    label.pack_start(renderer, true);
-    label.add_attribute(renderer, 'text', 0);
-    this._treeView.insert_column(label, 0);
+    // Column 0: Up button
+    const upColumn = new Gtk.TreeViewColumn();
+    const upRenderer = new Gtk.CellRendererPixbuf();
+    upColumn.pack_start(upRenderer, false);
+    upColumn.add_attribute(upRenderer, 'icon-name', 2); // Column 2: up icon name
+    upColumn.set_sizing(Gtk.TreeViewColumnSizing.FIXED);
+    upColumn.set_fixed_width(32);
+    this._treeView.insert_column(upColumn, 0);
+
+    // Column 1: Label
+    const labelColumn = new Gtk.TreeViewColumn({ title: 'Label' });
+    const labelRenderer = new Gtk.CellRendererText();
+    labelColumn.pack_start(labelRenderer, true);
+    labelColumn.add_attribute(labelRenderer, 'text', 0);
+    this._treeView.insert_column(labelColumn, 1);
+
+    // Column 2: Down button
+    const downColumn = new Gtk.TreeViewColumn();
+    const downRenderer = new Gtk.CellRendererPixbuf();
+    downColumn.pack_start(downRenderer, false);
+    downColumn.add_attribute(downRenderer, 'icon-name', 3); // Column 3: down icon name
+    downColumn.set_sizing(Gtk.TreeViewColumnSizing.FIXED);
+    downColumn.set_fixed_width(32);
+    this._treeView.insert_column(downColumn, 2);
+
+    // Handle button clicks on up/down columns
+    this._treeView.connect('button-press-event', (view, event) => {
+      const [, x, y] = event.get_coords();
+      const [path, column] = view.get_path_at_pos(x, y);
+      if (!path || !column) {
+        return false;
+      }
+
+      const columnIndex = this._treeView.get_columns().indexOf(column);
+      if (columnIndex === 0) {
+        // Up button clicked
+        this._moveRowUp(path);
+        return true;
+      } else if (columnIndex === 2) {
+        // Down button clicked
+        this._moveRowDown(path);
+        return true;
+      }
+      return false;
+    });
 
     return this._treeView;
   }
@@ -257,16 +295,6 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
     const delButton = (this._delButton = new Gtk.Button({ icon_name: 'list-remove-symbolic' }));
     delButton.connect('clicked', this._delClicked.bind(this));
     toolbar.append(delButton);
-
-    /* move up button */
-    const upButton = (this._upButton = new Gtk.Button({ icon_name: 'go-up-symbolic' }));
-    upButton.connect('clicked', this._moveUpClicked.bind(this));
-    toolbar.append(upButton);
-
-    /* move down button */
-    const downButton = (this._downButton = new Gtk.Button({ icon_name: 'go-down-symbolic' }));
-    downButton.connect('clicked', this._moveDownClicked.bind(this));
-    toolbar.append(downButton);
 
     this._updateToolbar();
 
@@ -302,48 +330,24 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
 
   _updateToolbar() {
     let sensitive = false;
-    let canMoveUp = false;
-    let canMoveDown = false;
 
     if (this._selection) {
-      const [isSelected, , iter] = this._selection.get_selected();
+      const [isSelected] = this._selection.get_selected();
       sensitive = isSelected;
-
-      if (isSelected && iter) {
-        // Check if we can move up (not the first item)
-        const path = this._store!.get_path(iter);
-        if (path && path.get_indices()[0] > 0) {
-          canMoveUp = true;
-        }
-
-        // Check if we can move down (not the last item)
-        const nextIter = this._store!.iter_next(iter);
-        if (nextIter) {
-          canMoveDown = true;
-        }
-      }
     }
 
     this._delButton!.set_sensitive(sensitive);
-    this._upButton!.set_sensitive(canMoveUp);
-    this._downButton!.set_sensitive(canMoveDown);
   }
 
-  _moveUpClicked() {
-    const [isSelected, , iter] = this._selection!.get_selected();
-
-    if (!isSelected || !iter) {
-      return;
-    }
-
-    const path = this._store!.get_path(iter);
-    if (!path) {
-      return;
-    }
-
+  _moveRowUp(path: Gtk.TreePath) {
     const indices = path.get_indices();
     if (indices[0] <= 0) {
       return; // Already at top
+    }
+
+    const iter = this._store!.get_iter(path);
+    if (!iter) {
+      return;
     }
 
     // Swap with previous item
@@ -358,15 +362,9 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
     }
   }
 
-  _moveDownClicked() {
-    const [isSelected, , iter] = this._selection!.get_selected();
-
-    if (!isSelected || !iter) {
-      return;
-    }
-
-    const path = this._store!.get_path(iter);
-    if (!path) {
+  _moveRowDown(path: Gtk.TreePath) {
+    const iter = this._store!.get_iter(path);
+    if (!iter) {
       return;
     }
 
