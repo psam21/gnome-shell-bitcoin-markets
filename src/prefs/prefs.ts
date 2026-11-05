@@ -40,6 +40,9 @@ class IndicatorConfigView {
   private _layoutProviderSettings: Gtk.Box;
   private _apiConfigView?: BaseProviderConfigView.BaseProviderConfigView;
 
+  // Force inclusion in bundle by referencing in a side-effect manner
+  static __keep = IndicatorConfigView;
+
   constructor(private gettext: GettextFunc, indicatorConfig: ConfigModel) {
     const margin = 8;
 
@@ -396,6 +399,21 @@ class BitcoinMarketsSettingsWidget extends Gtk.Box {
       this._showIndicatorConfig(null);
     }
     this._updateToolbar();
+  }
+
+  _showIndicatorConfig(indicatorConfig: ConfigModel | null) {
+    if (this._indicatorConfigView) {
+      this._indicatorConfigView.destroy();
+      this._configLayout!.remove(this._indicatorConfigView.widget);
+      this._indicatorConfigView = null;
+    }
+
+    if (indicatorConfig === null) {
+      return;
+    }
+
+    this._indicatorConfigView = new IndicatorConfigView(this.gettext, indicatorConfig);
+    this._configLayout!.append(this._indicatorConfigView.widget);
   }
 
   _updateToolbar() {
