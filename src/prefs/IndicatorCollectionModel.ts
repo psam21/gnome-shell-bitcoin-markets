@@ -62,6 +62,8 @@ export class IndicatorCollectionModel extends Gtk.ListStore {
     this.connect('row-inserted', mutex(this._onRowInserted.bind(this)));
 
     this.connect('row-deleted', mutex(this._onRowDeleted.bind(this)));
+
+    this.connect('row-reordered', mutex(this._onRowReordered.bind(this)));
   }
 
   getConfig(iter) {
@@ -127,6 +129,10 @@ export class IndicatorCollectionModel extends Gtk.ListStore {
   }
 
   _onRowDeleted(_self, _path, _iter) {
+    this._writeSettings();
+  }
+
+  _onRowReordered(_self, _path, _iter, _newOrder: number[]) {
     this._writeSettings();
   }
 }
